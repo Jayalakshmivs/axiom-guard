@@ -41,7 +41,7 @@ const Index = () => {
             </div>
           </div>
           <h1 className="font-display font-bold text-4xl md:text-6xl text-gradient mb-4">
-            AXIOM JAVELI
+            AXIOM JAVELIN
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground tracking-[0.3em] uppercase mb-8">
             Proactive • Precise • Protected
