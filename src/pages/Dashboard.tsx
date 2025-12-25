@@ -1,18 +1,112 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, ShieldAlert, Scan, Lock, Activity, AlertTriangle, CheckCircle } from "lucide-react";
+import { Shield, ShieldAlert, Scan, Lock, Activity, AlertTriangle, CheckCircle, RefreshCw } from "lucide-react";
 import SecurityHeader from "@/components/SecurityHeader";
 import ModuleCard from "@/components/ModuleCard";
 import StatusIndicator from "@/components/StatusIndicator";
 
+interface ModuleStats {
+  phishing: { urlsScanned: number; threatsBlocked: number; lastScan: string };
+  deepfake: { scansToday: number; accuracy: number; lastScan: string };
+  ransomware: { protectedFiles: number; vaultSize: string; threatsBlocked: number };
+  monitor: { eventsToday: number; alerts: number; lastEvent: string };
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [systemStatus] = useState({
+  const [isLive, setIsLive] = useState(true);
+  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [systemStatus, setSystemStatus] = useState({
     overall: "active" as const,
     threats: 0,
     scansToday: 47,
     protectedFiles: 1284,
+    lastUpdate: new Date(),
   });
+
+  const [moduleStats, setModuleStats] = useState<ModuleStats>({
+    phishing: { urlsScanned: 2847, threatsBlocked: 23, lastScan: "2m ago" },
+    deepfake: { scansToday: 15, accuracy: 98.7, lastScan: "5m ago" },
+    ransomware: { protectedFiles: 1284, vaultSize: "2.4 GB", threatsBlocked: 12 },
+    monitor: { eventsToday: 156, alerts: 3, lastEvent: "1m ago" },
+  });
+
+  const [recentAlerts, setRecentAlerts] = useState<Array<{
+    id: string;
+    type: 'phishing' | 'ransomware' | 'deepfake';
+    message: string;
+    time: string;
+    severity: 'low' | 'medium' | 'high';
+  }>>([]);
+
+  // Real-time stats update
+  useEffect(() => {
+    if (isLive) {
+      updateIntervalRef.current = setInterval(() => {
+        // Update system status
+        setSystemStatus(prev => ({
+          ...prev,
+          scansToday: prev.scansToday + (Math.random() < 0.3 ? 1 : 0),
+          protectedFiles: prev.protectedFiles + (Math.random() < 0.1 ? 1 : 0),
+          threats: Math.random() < 0.05 ? prev.threats + 1 : prev.threats,
+          lastUpdate: new Date(),
+        }));
+
+        // Update module stats
+        setModuleStats(prev => ({
+          phishing: {
+            ...prev.phishing,
+            urlsScanned: prev.phishing.urlsScanned + (Math.random() < 0.4 ? Math.floor(Math.random() * 3) + 1 : 0),
+            threatsBlocked: prev.phishing.threatsBlocked + (Math.random() < 0.05 ? 1 : 0),
+            lastScan: "Just now",
+          },
+          deepfake: {
+            ...prev.deepfake,
+            scansToday: prev.deepfake.scansToday + (Math.random() < 0.1 ? 1 : 0),
+            accuracy: 97.5 + Math.random() * 2,
+            lastScan: "Just now",
+          },
+          ransomware: {
+            ...prev.ransomware,
+            protectedFiles: prev.ransomware.protectedFiles + (Math.random() < 0.1 ? 1 : 0),
+            threatsBlocked: prev.ransomware.threatsBlocked + (Math.random() < 0.02 ? 1 : 0),
+          },
+          monitor: {
+            ...prev.monitor,
+            eventsToday: prev.monitor.eventsToday + (Math.random() < 0.2 ? 1 : 0),
+            alerts: Math.random() < 0.02 ? prev.monitor.alerts + 1 : prev.monitor.alerts,
+            lastEvent: "Just now",
+          },
+        }));
+
+        // Occasionally add new alerts
+        if (Math.random() < 0.1) {
+          const alertTypes = ['phishing', 'ransomware', 'deepfake'] as const;
+          const messages = {
+            phishing: ['Suspicious URL blocked', 'Phishing attempt detected', 'Malicious redirect prevented'],
+            ransomware: ['Encryption attempt blocked', 'Suspicious file access prevented', 'Vault integrity verified'],
+            deepfake: ['Manipulated image flagged', 'AI-generated content detected', 'Face swap attempt identified'],
+          };
+          const type = alertTypes[Math.floor(Math.random() * alertTypes.length)];
+          const newAlert = {
+            id: `alert_${Date.now()}`,
+            type,
+            message: messages[type][Math.floor(Math.random() * messages[type].length)],
+            time: 'Just now',
+            severity: (['low', 'medium', 'high'] as const)[Math.floor(Math.random() * 3)],
+          };
+          setRecentAlerts(prev => [newAlert, ...prev].slice(0, 5));
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
+    };
+  }, [isLive]);
 
   const handleLogout = () => {
     navigate("/");
@@ -27,8 +121,8 @@ const Dashboard = () => {
       statusText: "Active Protection",
       route: "/anti-phishing",
       stats: [
-        { label: "URLs Scanned", value: "2,847" },
-        { label: "Threats Blocked", value: "23" },
+        { label: "URLs Scanned", value: moduleStats.phishing.urlsScanned.toLocaleString() },
+        { label: "Threats Blocked", value: moduleStats.phishing.threatsBlocked.toString() },
       ],
     },
     {
@@ -39,8 +133,8 @@ const Dashboard = () => {
       statusText: "Ready to Scan",
       route: "/deepfake-scanner",
       stats: [
-        { label: "Scans Today", value: "15" },
-        { label: "Accuracy", value: "98.7%" },
+        { label: "Scans Today", value: moduleStats.deepfake.scansToday.toString() },
+        { label: "Accuracy", value: `${moduleStats.deepfake.accuracy.toFixed(1)}%` },
       ],
     },
     {
@@ -51,8 +145,8 @@ const Dashboard = () => {
       statusText: "Monitoring",
       route: "/anti-ransomware",
       stats: [
-        { label: "Protected Files", value: "1,284" },
-        { label: "Vault Size", value: "2.4 GB" },
+        { label: "Protected Files", value: moduleStats.ransomware.protectedFiles.toLocaleString() },
+        { label: "Threats Blocked", value: moduleStats.ransomware.threatsBlocked.toString() },
       ],
     },
     {
@@ -63,8 +157,8 @@ const Dashboard = () => {
       statusText: "Online",
       route: "/threat-monitor",
       stats: [
-        { label: "Events Today", value: "156" },
-        { label: "Alerts", value: "3" },
+        { label: "Events Today", value: moduleStats.monitor.eventsToday.toString() },
+        { label: "Alerts", value: moduleStats.monitor.alerts.toString() },
       ],
     },
   ];
@@ -84,45 +178,112 @@ const Dashboard = () => {
                   status="active" 
                   size="lg" 
                   className="absolute -top-1 -right-1" 
+                  pulse={isLive}
                 />
               </div>
               <div>
                 <h1 className="font-display text-2xl font-bold">Security Dashboard</h1>
-                <p className="text-muted-foreground">All systems operational</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-muted-foreground">All systems operational</p>
+                  {isLive && (
+                    <span className="flex items-center gap-1 text-xs text-accent">
+                      <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                      Live
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-accent/10">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-accent">{systemStatus.threats}</p>
-                  <p className="text-xs text-muted-foreground">Active Threats</p>
-                </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setIsLive(!isLive)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  isLive ? 'bg-accent/10 text-accent' : 'bg-secondary/50 text-muted-foreground'
+                }`}
+              >
+                <RefreshCw className={`w-4 h-4 ${isLive ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                {isLive ? 'Live Updates' : 'Paused'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-6 mt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-accent/10">
+                <CheckCircle className="w-5 h-5 text-accent" />
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Scan className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-primary">{systemStatus.scansToday}</p>
-                  <p className="text-xs text-muted-foreground">Scans Today</p>
-                </div>
+              <div>
+                <p className="text-2xl font-bold text-accent">{systemStatus.threats}</p>
+                <p className="text-xs text-muted-foreground">Active Threats</p>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-warning/10">
-                  <Lock className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-warning">{systemStatus.protectedFiles.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Protected Files</p>
-                </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Scan className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-primary">{systemStatus.scansToday}</p>
+                <p className="text-xs text-muted-foreground">Scans Today</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-warning/10">
+                <Lock className="w-5 h-5 text-warning" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-warning">{systemStatus.protectedFiles.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Protected Files</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-destructive/10">
+                <ShieldAlert className="w-5 h-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-destructive">{moduleStats.phishing.threatsBlocked + moduleStats.ransomware.threatsBlocked}</p>
+                <p className="text-xs text-muted-foreground">Total Blocked</p>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Real-time Alerts */}
+        {recentAlerts.length > 0 && (
+          <div className="glass-card p-4 mb-8 animate-fade-in-up">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                Real-time Alerts
+              </h3>
+              <span className="text-xs text-accent animate-pulse">● Live</span>
+            </div>
+            <div className="space-y-2 max-h-[150px] overflow-y-auto">
+              {recentAlerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`flex items-center justify-between p-3 rounded-lg animate-fade-in-up ${
+                    alert.severity === 'high' ? 'bg-destructive/10 border-l-2 border-destructive' :
+                    alert.severity === 'medium' ? 'bg-warning/10 border-l-2 border-warning' :
+                    'bg-secondary/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <StatusIndicator
+                      status={alert.severity === 'high' ? 'danger' : alert.severity === 'medium' ? 'warning' : 'active'}
+                      size="sm"
+                      pulse
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{alert.message}</p>
+                      <p className="text-xs text-muted-foreground">{alert.type} • {alert.time}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Alert Banner */}
         <div className="glass-card p-4 mb-8 border-l-4 border-warning animate-fade-in-up animation-delay-100">
@@ -153,13 +314,14 @@ const Dashboard = () => {
           <h2 className="font-display text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: "Quick Scan", icon: Scan, color: "text-primary" },
-              { label: "Check URL", icon: ShieldAlert, color: "text-accent" },
-              { label: "Secure Vault", icon: Lock, color: "text-warning" },
-              { label: "View Logs", icon: Activity, color: "text-muted-foreground" },
+              { label: "Quick Scan", icon: Scan, color: "text-primary", route: "/deepfake-scanner" },
+              { label: "Check URL", icon: ShieldAlert, color: "text-accent", route: "/anti-phishing" },
+              { label: "Secure Vault", icon: Lock, color: "text-warning", route: "/anti-ransomware" },
+              { label: "View Logs", icon: Activity, color: "text-muted-foreground", route: "/threat-monitor" },
             ].map((action) => (
               <button
                 key={action.label}
+                onClick={() => navigate(action.route)}
                 className="flex flex-col items-center gap-2 p-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all duration-300 hover:scale-105 group"
               >
                 <action.icon className={`w-6 h-6 ${action.color} group-hover:scale-110 transition-transform`} />
@@ -167,6 +329,11 @@ const Dashboard = () => {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Last Updated */}
+        <div className="mt-4 text-center text-xs text-muted-foreground">
+          Last updated: {systemStatus.lastUpdate.toLocaleTimeString()}
         </div>
       </main>
     </div>

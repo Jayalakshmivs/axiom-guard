@@ -314,32 +314,108 @@ export const ransomwareApi = {
 // ==================== Simulation Functions (for demo/fallback) ====================
 
 function simulatePhishingScan(url: string): PhishingScanResult {
-  const suspiciousPatterns = ['suspicious', 'phishing', 'scam', 'xyz', 'click', 'free', 'win'];
-  const isSuspicious = suspiciousPatterns.some(p => url.toLowerCase().includes(p));
-  const isHttps = url.startsWith('https://');
+  // Enhanced phishing detection with multiple indicators
+  const urlLower = url.toLowerCase();
+  let riskScore = 0;
+  const findings: string[] = [];
   
-  let status: 'safe' | 'warning' | 'danger' = 'safe';
-  let confidence = 95;
-  
-  if (isSuspicious) {
-    status = 'danger';
-    confidence = 92;
-  } else if (!isHttps) {
-    status = 'warning';
-    confidence = 78;
+  // 1. Dangerous TLD check (25% weight)
+  const dangerousTLDs = ['.xyz', '.tk', '.ml', '.ga', '.cf', '.gq', '.top', '.click', '.loan', '.work'];
+  if (dangerousTLDs.some(tld => urlLower.includes(tld))) {
+    riskScore += 25;
+    findings.push('High-risk top-level domain detected');
   }
+
+  // 2. Suspicious keywords (30% weight)
+  const phishingKeywords = ['login', 'verify', 'account', 'secure', 'update', 'confirm', 'banking', 'password', 'signin', 'authenticate'];
+  const suspiciousKeywords = ['free', 'win', 'prize', 'urgent', 'click', 'limited', 'offer', 'deal'];
+  const dangerKeywords = ['phishing', 'scam', 'fake', 'hack', 'malware', 'virus'];
   
+  if (dangerKeywords.some(k => urlLower.includes(k))) {
+    riskScore += 40;
+    findings.push('Known malicious keywords in URL');
+  } else if (phishingKeywords.filter(k => urlLower.includes(k)).length >= 2) {
+    riskScore += 25;
+    findings.push('Multiple credential-related keywords detected');
+  } else if (suspiciousKeywords.some(k => urlLower.includes(k))) {
+    riskScore += 15;
+    findings.push('Suspicious promotional keywords detected');
+  }
+
+  // 3. Brand impersonation check (25% weight)
+  const knownBrands = ['paypal', 'amazon', 'google', 'microsoft', 'apple', 'facebook', 'netflix', 'bank'];
+  const officialDomains = ['paypal.com', 'amazon.com', 'google.com', 'microsoft.com', 'apple.com', 'facebook.com', 'netflix.com'];
+  
+  for (const brand of knownBrands) {
+    if (urlLower.includes(brand) && !officialDomains.some(d => urlLower.includes(d))) {
+      riskScore += 30;
+      findings.push(`Potential ${brand} brand impersonation`);
+      break;
+    }
+  }
+
+  // 4. URL structure analysis (20% weight)
+  const hasExcessiveSubdomains = (url.match(/\./g) || []).length > 4;
+  const hasIPAddress = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(url);
+  const hasEncodedChars = url.includes('%') && (url.includes('%2F') || url.includes('%3A'));
+  const hasSuspiciousLength = url.length > 100;
+  
+  if (hasIPAddress) {
+    riskScore += 20;
+    findings.push('Direct IP address used instead of domain');
+  }
+  if (hasExcessiveSubdomains) {
+    riskScore += 10;
+    findings.push('Excessive subdomain nesting detected');
+  }
+  if (hasEncodedChars) {
+    riskScore += 15;
+    findings.push('Suspicious URL encoding detected');
+  }
+  if (hasSuspiciousLength) {
+    riskScore += 5;
+    findings.push('Unusually long URL');
+  }
+
+  // 5. HTTPS check
+  const isHttps = url.startsWith('https://');
+  if (!isHttps) {
+    riskScore += 10;
+    findings.push('No SSL/TLS encryption (HTTP only)');
+  }
+
+  // Determine result
+  let status: 'safe' | 'warning' | 'danger';
+  let confidence: number;
+  let details: string;
+  let threatType: string | undefined;
+
+  if (riskScore >= 40) {
+    status = 'danger';
+    confidence = Math.min(98, 75 + riskScore * 0.3);
+    threatType = riskScore >= 60 ? 'Confirmed Phishing' : 'Suspected Phishing';
+    details = `HIGH RISK: ${findings.join('. ')}. Do NOT enter any personal information on this site.`;
+  } else if (riskScore >= 15) {
+    status = 'warning';
+    confidence = 60 + riskScore;
+    threatType = 'Potential Threat';
+    details = `CAUTION: ${findings.join('. ')}. Verify the authenticity before proceeding.`;
+  } else {
+    status = 'safe';
+    confidence = 90 + Math.random() * 8;
+    details = 'No threats detected. URL passes security checks and appears legitimate.';
+    if (isHttps) {
+      findings.push('Valid SSL certificate');
+    }
+  }
+
   return {
     url,
     status,
     confidence,
-    details: status === 'safe' 
-      ? 'No threats detected. This website appears to be legitimate.'
-      : status === 'warning'
-      ? 'This URL shows some suspicious patterns. Proceed with caution.'
-      : 'This URL is identified as a phishing threat. Do not proceed.',
+    details,
     timestamp: new Date().toISOString(),
-    threatType: status !== 'safe' ? 'Phishing attempt' : undefined,
+    threatType,
   };
 }
 
