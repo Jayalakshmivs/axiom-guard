@@ -1,6 +1,9 @@
 // API Service Layer for FastAPI Backend Integration
 // Configure your FastAPI backend URL here
+// Set VITE_API_URL in your .env file to point to your FastAPI backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+console.log('API Base URL:', API_BASE_URL);
 
 // Types
 export interface ScanResult {
